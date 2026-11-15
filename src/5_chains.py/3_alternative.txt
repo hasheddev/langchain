@@ -1,0 +1,76 @@
+When you pass a LangChain (a Runnable sequence, retriever, LLM, or function) as a value inside RunnablePassthrough.assign(), LangChain automatically invokes that chain using the current input dictionary and assigns the resulting output to the specified key.
+
+
+from langchain_core.runnables import RunnablePassthrough, RunnableBranch, RunnableLambda
+from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
+from langchain_core.prompts import PromptTemplate
+from pydantic import BaseModel, Field
+from typing import Literal
+
+from models import qwen_model, gemini_model
+
+parser = StrOutputParser()
+
+class FeedBack(BaseModel):
+    sentiment: Literal["positive", "negative"] = Field(
+        description="Sentiment of user feedback must be either positive or negative"
+    )
+
+parser2 = PydanticOutputParser(pydantic_object=FeedBack)
+
+user_message = """
+"Extremely disappointed with the battery life"
+I bought the NovaSound ANC Headphones last week after reading glowing reviews...
+"""
+
+prompt1 = PromptTemplate(
+    template="classify the sentiment of the following text into positive or negative {feedback}\n{format}",
+    input_variables=["feedback"],
+    partial_variables={"format": parser2.get_format_instructions()},
+)
+
+prompt2 = PromptTemplate(
+    template="Write an appropriate response to this positive feedback: {feedback}",
+    input_variables=["feedback"],
+)
+
+prompt3 = PromptTemplate(
+    template="Write an appropriate response to this negative feedback: {feedback}",
+    input_variables=["feedback"],
+)
+
+# 1. Update your condition functions to look inside the dictionary key
+def is_positive(x):
+    return x["sentiment"].sentiment == "positive"
+
+def is_negative(x):
+    return x["sentiment"].sentiment == "negative"
+
+# 2. Use RunnablePassthrough.assign to keep the original input dictionary 
+# and add the classification result as a new key ("sentiment")
+chain = (
+    RunnablePassthrough.assign(
+        sentiment=prompt1 | qwen_model | parser2
+    )
+    | RunnableBranch(
+        (
+            is_positive,
+            # Now x is a dict containing {"feedback": ..., "sentiment": ...}
+            RunnableLambda(lambda x: print(f"Lambda received x: {x}") or {"feedback": x["feedback"]})
+            | prompt2
+            | gemini_model
+            | parser,
+        ),
+        (
+            is_negative,
+            RunnableLambda(lambda x: print(f"Lambda received x: {x}") or {"feedback": x["feedback"]})
+            | prompt3
+            | gemini_model
+            | parser,
+        ),
+        (RunnableLambda(lambda x: "No valid sentiment found")),
+    )
+)
+
+result = chain.invoke({"feedback": user_message})
+print(result)

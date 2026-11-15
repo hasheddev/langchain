@@ -1,0 +1,26 @@
+# --- uv / Python Virtual Environments ---
+# uv automatically creates an internal .gitignore inside .venv/ to exclude it, 
+# but explicitly adding it here keeps your root clean and covers manual setups.
+.venv/
+
+# --- Build and Distribution ---
+dist/
+build/
+wheels/
+*.egg-info/
+
+# --- Python Cache and Compiled Files ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# --- Environment Variables / Secrets ---
+.env
+.env.*
+!.env.example
+
+# --- IDE and System Files ---
+.DS_Store
+.idea/
+.vscode/
